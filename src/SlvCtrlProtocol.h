@@ -4,10 +4,8 @@
 #include <stddef.h>
 #include <type_traits>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <strings.h>
-#include <climits>
 
 // Access mode
 enum class SlvCtrlAccess : uint8_t { RO, WO, RW, INVALID };
@@ -44,14 +42,6 @@ inline const char* slvCtrlAccessToString(SlvCtrlAccess a) {
   }
 }
 
-inline size_t slvClampSnprintfResult(char* out, size_t outLen, int n) {
-  if (!out || outLen == 0) return 0;
-  if (n < 0) { out[0] = '\0'; return 0; }
-  // snprintf returns "would have written" count; clamp if truncated
-  if ((size_t)n >= outLen) return outLen - 1;
-  return (size_t)n;
-}
-
 struct ISlvCtrlTransport {
   virtual ~ISlvCtrlTransport() = default;
   virtual void readCommand() = 0;
@@ -61,6 +51,10 @@ struct ISlvCtrlTransport {
 struct ISlvCtrlOut {
   virtual ~ISlvCtrlOut() = default;
   virtual void print(const char* s) = 0;
+  virtual void print(uint32_t v) = 0;
+  virtual void print(int32_t v) = 0;
+  virtual void print(float v, uint8_t decimals = 3) = 0;
+  virtual void print(bool v) = 0;
   virtual void println(const char* s = "") = 0;
 };
 
@@ -75,11 +69,10 @@ struct ISlvCtrlCmdCtx {
 struct IAttribute {
   virtual ~IAttribute() = default;
   virtual const char* name() const = 0;
-  virtual const char* typeName() const = 0;
   virtual SlvCtrlAccess access() const = 0;
   virtual SlvCtrlParseError setFromCString(const char* s) = 0;
-  virtual size_t formatValue(char* out, size_t outLen) const = 0;
-  virtual size_t describeTo(char* out, size_t outLen) const = 0;
+  virtual void writeValue(ISlvCtrlOut& out) const = 0;
+  virtual void describe(ISlvCtrlOut& out) const = 0;
 };
 
 template <typename T>
@@ -94,8 +87,6 @@ class BaseAttribute : public IAttribute {
 
     ~BaseAttribute() override = default;
 
-    const char* typeName() const override = 0;
-
     const char* name() const override { return name_; }
 
     SlvCtrlAccess access() const override { 
@@ -104,8 +95,6 @@ class BaseAttribute : public IAttribute {
       if (!getter_ && setter_) { return SlvCtrlAccess::WO; }
       return SlvCtrlAccess::INVALID;
     }
-
-    SlvCtrlParseError setFromCString(const char* s) override = 0;
 
     T getValue() const {
       return getter_ ? getter_(ctx_) : T{};
@@ -116,9 +105,8 @@ class BaseAttribute : public IAttribute {
       return SlvCtrlParseError::ReadOnly;
     }
 
-    size_t describeTo(char* out, size_t outLen) const override {
-      int n = snprintf(out, outLen, "%s[%s]", slvCtrlAccessToString(access()), typeName());
-      return slvClampSnprintfResult(out, outLen, n);
+    void writeValue(ISlvCtrlOut& out) const override {
+      out.print(this->getValue());
     }
 
   private:
@@ -128,25 +116,23 @@ class BaseAttribute : public IAttribute {
     Setter setter_;
 };
 
-class IntAttribute : public BaseAttribute<int> {
+class IntAttribute : public BaseAttribute<int32_t> {
   public:
     IntAttribute(const char* name, Getter getter, Setter setter, void* ctx = nullptr)
-    : BaseAttribute<int>(name, getter, setter, ctx) {}
-
-    const char* typeName() const override { return "int"; }
+    : BaseAttribute<int32_t>(name, getter, setter, ctx) {}
     
     SlvCtrlParseError setFromCString(const char* s) override {
       if (!s) return SlvCtrlParseError::MissingValue;
       char* end = nullptr;
       long value = strtol(s, &end, 10);
       if (end == s || *end != '\0') return SlvCtrlParseError::NotANumber;
-      if (value < INT_MIN || value > INT_MAX) return SlvCtrlParseError::OutOfRange;
-      return setValue((int)value);
+      if (value < (long)INT32_MIN || value > (long)INT32_MAX) return SlvCtrlParseError::OutOfRange;
+      return setValue((int32_t)value);
     }
 
-    size_t formatValue(char* out, size_t outLen) const override {
-      int n = snprintf(out, outLen, "%d", this->getValue());
-      return slvClampSnprintfResult(out, outLen, n);
+    void describe(ISlvCtrlOut& out) const override {
+      out.print(slvCtrlAccessToString(access()));
+      out.print("[int]");
     }
 };
 
@@ -154,8 +140,6 @@ class FloatAttribute : public BaseAttribute<float> {
   public:
     FloatAttribute(const char* name, Getter getter, Setter setter, void* ctx = nullptr)
         : BaseAttribute<float>(name, getter, setter, ctx) {}
-
-    const char* typeName() const override { return "float"; }
 
     SlvCtrlParseError setFromCString(const char* s) override {
       if (!s) return SlvCtrlParseError::MissingValue;
@@ -165,9 +149,9 @@ class FloatAttribute : public BaseAttribute<float> {
       return setValue(v);
     }
 
-    size_t formatValue(char* out, size_t outLen) const override {
-      int n = snprintf(out, outLen, "%.3f", (double)this->getValue());
-      return slvClampSnprintfResult(out, outLen, n);
+    void describe(ISlvCtrlOut& out) const override {
+      out.print(slvCtrlAccessToString(access()));
+      out.print("[float]");
     }
 };
 
@@ -176,8 +160,6 @@ class BoolAttribute : public BaseAttribute<bool> {
     BoolAttribute(const char* name, Getter getter, Setter setter, void* ctx = nullptr)
         : BaseAttribute<bool>(name, getter, setter, ctx) {}
 
-    const char* typeName() const override { return "bool"; }
-
     SlvCtrlParseError setFromCString(const char* s) override {
       if (!s) return SlvCtrlParseError::MissingValue;
       if (strcmp(s, "1") == 0 || strcasecmp(s, "true") == 0) { return setValue(true); }
@@ -185,10 +167,13 @@ class BoolAttribute : public BaseAttribute<bool> {
       return SlvCtrlParseError::InvalidValue;
     }
 
-    size_t formatValue(char* out, size_t outLen) const override {
-      const char* s = this->getValue() ? "true" : "false";
-      int n = snprintf(out, outLen, "%s", s);
-      return slvClampSnprintfResult(out, outLen, n);
+    void describe(ISlvCtrlOut& out) const override {
+      out.print(slvCtrlAccessToString(access()));
+      out.print("[bool]");
+    }
+
+    void writeValue(ISlvCtrlOut& out) const override {
+      out.print(this->getValue() ? "true" : "false");
     }
 };
 
@@ -199,26 +184,13 @@ class RangeAttribute : public BaseAttribute<T> {
   using Setter = typename Base::Setter;
 
   static_assert(
-    std::is_same<T, int>::value || std::is_same<T, float>::value,
-    "RangeAttribute<T>: T must be int or float"
+    std::is_same<T, int32_t>::value || std::is_same<T, float>::value,
+    "RangeAttribute<T>: T must be int32_t or float"
   );
 
   public:
     RangeAttribute(const char* name, Getter getter, Setter setter, T min, T max, void* ctx = nullptr)
-        : BaseAttribute<T>(name, getter, setter, ctx), min_(min), max_(max) {
-
-      if constexpr (std::is_floating_point_v<T>) {
-        int n = snprintf(type_, sizeof(type_), "%.3f-%.3f", (double)min_, (double)max_);
-        (void)slvClampSnprintfResult(type_, sizeof(type_), n);
-      } else if constexpr (std::is_integral_v<T>) {
-        int n = snprintf(type_, sizeof(type_), "%d-%d", (int)min_, (int)max_);
-        (void)slvClampSnprintfResult(type_, sizeof(type_), n);
-      }
-    }
-
-    const char* typeName() const override { 
-      return type_;
-    }
+        : BaseAttribute<T>(name, getter, setter, ctx), min_(min), max_(max) {}
 
     SlvCtrlParseError setFromCString(const char* s) override {
       if (!s) return SlvCtrlParseError::MissingValue;
@@ -227,33 +199,42 @@ class RangeAttribute : public BaseAttribute<T> {
         float v = strtof(s, &end);
         if (end == s || *end != '\0') return SlvCtrlParseError::NotANumber;
         if (v < min_ || v > max_) return SlvCtrlParseError::OutOfRange;
-        return this->setValue((T)v);
+        return this->setValue(v);
       }
       
       if constexpr (std::is_integral_v<T>) {
         long v = strtol(s, &end, 10);
         if (end == s || *end != '\0') return SlvCtrlParseError::NotANumber;
-        if (v < (long)min_ || v > (long)max_) return SlvCtrlParseError::OutOfRange;
-        return this->setValue((T)v);
+        if (v < (long)INT32_MIN || v > (long)INT32_MAX) return SlvCtrlParseError::OutOfRange;
+        T iv = (T)v; // T is int32_t here
+        if (iv < min_ || iv > max_) return SlvCtrlParseError::OutOfRange;
+        return this->setValue(iv);
       }
 
       __builtin_trap();
     }
 
-    size_t formatValue(char* out, size_t outLen) const override {
-      if constexpr (std::is_floating_point_v<T>) {
-        int n = snprintf(out, outLen, "%.3f", (double)this->getValue());
-        return slvClampSnprintfResult(out, outLen, n);
-      } else {
-        int n = snprintf(out, outLen, "%d", (int)this->getValue());
-        return slvClampSnprintfResult(out, outLen, n);
+    void describe(ISlvCtrlOut& out) const override {
+      out.print(slvCtrlAccessToString(this->access()));
+      out.print("[");
+      if constexpr (std::is_same_v<T, int32_t>) {
+        out.print("int:");
       }
+      else if constexpr (std::is_same_v<T, float>) {
+        out.print("float:");
+      }
+      else {
+        out.print("?:");
+      }
+      out.print(min_);
+      out.print("-");
+      out.print(max_);
+      out.print("]");
     }
 
   private:
     T min_;
     T max_;
-    char type_[32];
 };
 
 class StrAttribute : public BaseAttribute<const char*> {
@@ -261,17 +242,19 @@ class StrAttribute : public BaseAttribute<const char*> {
     StrAttribute(const char* name, Getter getter, Setter setter, void* ctx = nullptr)
       : BaseAttribute<const char*>(name, getter, setter, ctx) {}
 
-    const char* typeName() const override { return "str"; }
-
     SlvCtrlParseError setFromCString(const char* s) override {
       if (!s) return SlvCtrlParseError::MissingValue;
       return setValue(s);
     }
 
-    size_t formatValue(char* out, size_t outLen) const override {
+    void describe(ISlvCtrlOut& out) const override {
+      out.print(slvCtrlAccessToString(access()));
+      out.print("[str]");
+    }
+
+    void writeValue(ISlvCtrlOut& out) const override {
       const char* s = this->getValue();
-      int n = snprintf(out, outLen, "%s", s ? s : "");
-      return slvClampSnprintfResult(out, outLen, n);
+      out.print(s ? s : "");
     }
 };
 
@@ -286,25 +269,23 @@ class StrAttribute : public BaseAttribute<const char*> {
 //
 class SlvCtrlProtocol {
   public:
-    static constexpr uint32_t kProtocolVersion = 10000;
+    static constexpr uint32_t protocolVersion = 10000;
 
     template <size_t N>
-    SlvCtrlProtocol(const char* deviceType,
-                    uint32_t fwVersion,
-                    IAttribute* (&attrs)[N])
+    SlvCtrlProtocol(const char* deviceType, uint32_t fwVersion, IAttribute* (&attrs)[N])
       : deviceType_(deviceType ? deviceType : "unknown"),
         fwVersion_(fwVersion),
         attrs_(&attrs[0]),
         attrCount_(N) {}
 
     void cmdIntroduce(ISlvCtrlCmdCtx& ctx) {
-      char buf[96];
-      int n = snprintf(buf, sizeof(buf), "%s;%lu;%lu",
-                      deviceType_,
-                      (unsigned long)fwVersion_,
-                      (unsigned long)kProtocolVersion);
-      (void)slvClampSnprintfResult(buf, sizeof(buf), n);
-      ctx.out().println(buf);
+      auto& o = ctx.out();
+      o.print(deviceType_);
+      o.print(";");
+      o.print(fwVersion_);
+      o.print(";");
+      o.print(protocolVersion);
+      o.println();
     }
 
     void cmdAttributes(ISlvCtrlCmdCtx& ctx) {
@@ -312,18 +293,17 @@ class SlvCtrlProtocol {
       o.print("attributes");
       if (attrCount_) o.print(";");
 
-      char desc[64];
-
+      bool first = true;
       for (size_t i = 0; i < attrCount_; ++i) {
-        if (i) o.print(",");
         IAttribute* a = attrs_[i];
         if (!a) continue;
 
-        a->describeTo(desc, sizeof(desc));
+        if (!first) o.print(",");
+        first = false;
 
         o.print(a->name());
         o.print(":");
-        o.print(desc);
+        a->describe(o);
       }
       o.println();
     }
@@ -333,19 +313,17 @@ class SlvCtrlProtocol {
       o.print("status");
       if (attrCount_) o.print(";");
 
+      bool first = true;
       for (size_t i = 0; i < attrCount_; ++i) {
-        if (i) o.print(",");
         IAttribute* a = attrs_[i];
-        if (!a) continue;
+        if (!a || !canRead(a->access())) continue;
+
+        if (!first) o.print(",");
+        first = false;
 
         o.print(a->name());
         o.print(":");
-
-        if (canRead(a->access())) {
-          char v[64];
-          a->formatValue(v, sizeof(v));
-          o.print(v);
-        }
+        a->writeValue(o);
       }
       o.println();
     }
@@ -359,12 +337,9 @@ class SlvCtrlProtocol {
       if (!a) { o.println("ERR unknown attribute"); return; }
       if (!canRead(a->access())) { o.println("ERR write-only"); return; }
 
-      char v[64];
-      a->formatValue(v, sizeof(v));
-
       o.print(a->name());
       o.print(";");
-      o.print(v);
+      a->writeValue(o);
       o.println(";status:success");
     }
 
@@ -383,11 +358,11 @@ class SlvCtrlProtocol {
 
       SlvCtrlParseError err = a->setFromCString(value);
 
-      char buf[192];
-      int n = snprintf(buf, sizeof(buf), "%s;%s;%s",
-                      name, value, slvCtrlParseErrorToString(err));
-      (void)slvClampSnprintfResult(buf, sizeof(buf), n);
-      o.println(buf);
+      o.print(name);
+      o.print(";");
+      o.print(value);
+      o.print(";");
+      o.println(slvCtrlParseErrorToString(err));
     }
 
     void cmdUnrecognized(ISlvCtrlCmdCtx& ctx, const char* cmd) {
