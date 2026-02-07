@@ -1,0 +1,24 @@
+{
+  "name": "SlvCtrlProtocol",
+  "version": "0.1.0",
+  "description": "Serial control protocol wrapper exposing typed attributes via SerialCommands",
+  "keywords": "serial, protocol, arduino, teensy, platformio",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SlvCtrlPlus/SlvCtrlProtocol.git"
+  },
+  "license": "MIT",
+  "frameworks": [
+    "arduino"
+  ],
+  "platforms": "*",
+  "dependencies": [
+    {
+      "name": "ppedro74/SerialCommands",
+      "version": "^2.2.0"
+    }
+  ],
+  "headers": [
+    "SlvCtrlProtocol.h"
+  ]
+}
