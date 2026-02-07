@@ -13,8 +13,10 @@ jobs:
     strategy:
       matrix:
         env:
+          - esp32dev
           - teensy40
           - adafruit_trinket_m0
+          - uno_r4_minima
 
     steps:
       - name: Checkout
