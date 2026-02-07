@@ -227,7 +227,7 @@ class RangeAttribute : public BaseAttribute<T> {
         out.print("?:");
       }
       out.print(min_);
-      out.print("-");
+      out.print("..");
       out.print(max_);
       out.print("]");
     }
