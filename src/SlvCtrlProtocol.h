@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <limits.h>
 
 // Access mode
 enum class SlvCtrlAccess : uint8_t { RO, WO, RW, INVALID };
@@ -218,18 +219,18 @@ class RangeAttribute : public BaseAttribute<T> {
       out.print(slvCtrlAccessToString(this->access()));
       out.print("[");
       if constexpr (std::is_same_v<T, int32_t>) {
-        out.print("int:");
+        out.print("int(");
       }
       else if constexpr (std::is_same_v<T, float>) {
-        out.print("float:");
+        out.print("float(");
       }
       else {
-        out.print("?:");
+        out.print("?(");
       }
       out.print(min_);
       out.print("..");
       out.print(max_);
-      out.print("]");
+      out.print(")]");
     }
 
   private:
@@ -280,18 +281,18 @@ class SlvCtrlProtocol {
 
     void cmdIntroduce(ISlvCtrlCmdCtx& ctx) {
       auto& o = ctx.out();
+      o.print("introduce;type:");
       o.print(deviceType_);
-      o.print(";");
+      o.print(";fw:");
       o.print(fwVersion_);
-      o.print(";");
+      o.print(";protocol:");
       o.print(protocolVersion);
-      o.println();
+      o.println(";status:ok");
     }
 
     void cmdAttributes(ISlvCtrlCmdCtx& ctx) {
       auto& o = ctx.out();
-      o.print("attributes");
-      if (attrCount_) o.print(";");
+      o.print("attributes;");
 
       bool first = true;
       for (size_t i = 0; i < attrCount_; ++i) {
@@ -305,6 +306,7 @@ class SlvCtrlProtocol {
         o.print(":");
         a->describe(o);
       }
+      o.print(";status:ok");
       o.println();
     }
 
@@ -325,51 +327,68 @@ class SlvCtrlProtocol {
         o.print(":");
         a->writeValue(o);
       }
+      o.print(";status:ok");
       o.println();
     }
 
     void cmdGet(ISlvCtrlCmdCtx& ctx) {
       auto& o = ctx.out();
       const char* name = ctx.next();
-      if (!name) { o.println("ERR usage: get <name>"); return; }
+      if (!name) { o.println("get;status:error;reason:missing_attribute_name_arg"); return; }
 
       IAttribute* a = findAttr(name);
-      if (!a) { o.println("ERR unknown attribute"); return; }
-      if (!canRead(a->access())) { o.println("ERR write-only"); return; }
+      if (!a) { o.print("get "); o.print(name); o.println(";status:error;reason:unknown_attribute"); return; }
+      if (!canRead(a->access())) { o.print("get "); o.print(name); o.println(";status:error;reason:write_only_attribute"); return; }
 
+      o.print("get ");
       o.print(a->name());
-      o.print(";");
+      o.print(";value:");
       a->writeValue(o);
-      o.println(";status:success");
+      o.println(";status:ok");
     }
 
     void cmdSet(ISlvCtrlCmdCtx& ctx) {
       auto& o = ctx.out();
       const char* name  = ctx.next();
       const char* value = ctx.next();
-      if (!name || !value) {
-        o.println("ERR usage: set <name> <value>");
+
+      if (!name) {
+        o.println("set;status:error;reason:attribute_name_missing");
+        return;
+      }
+
+      if (!value) {
+        o.print("set ");
+        o.print(name);
+        o.println(";status:error;reason:attribute_value_missing");
         return;
       }
 
       IAttribute* a = findAttr(name);
-      if (!a) { o.println("ERR unknown attribute"); return; }
-      if (!canWrite(a->access())) { o.println("ERR read-only"); return; }
+      if (!a) { o.print("set "); o.print(name); o.println(";status:error;reason:unknown_attribute"); return; }
+      if (!canWrite(a->access())) { o.print("set "); o.print(name); o.println(";status:error;reason:read_only_attribute"); return; }
 
       SlvCtrlParseError err = a->setFromCString(value);
 
+      o.print("set ");
       o.print(name);
-      o.print(";");
+      o.print(" ");
       o.print(value);
       o.print(";");
-      o.println(slvCtrlParseErrorToString(err));
+
+      if (err == SlvCtrlParseError::Ok) {
+        o.println("status:ok");
+      } else {
+        o.print("status:error;reason:");
+        o.println(slvCtrlParseErrorToString(err));
+      }
     }
 
     void cmdUnrecognized(ISlvCtrlCmdCtx& ctx, const char* cmd) {
       auto& o = ctx.out();
-      o.print("ERR unrecognized [");
       o.print(cmd ? cmd : "");
-      o.println("]");
+      o.print(";status:error;reason:unknown_command");
+      o.println();
     }
 
   private:
