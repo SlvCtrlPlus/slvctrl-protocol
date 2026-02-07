@@ -8,6 +8,12 @@ jobs:
   platformio:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        env:
+          - teensy40
+          - adafruit_trinket_m0
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,7 +36,7 @@ jobs:
       - name: Install PlatformIO
         run: pip install -U platformio
 
-      - name: Build example
+      - name: Build example (${{ matrix.env }})
         run: |
           cd examples/basic
-          platformio run
+          platformio run -e ${{ matrix.env }}
