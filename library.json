@@ -20,7 +20,8 @@
   "platforms": "*",
   "dependencies": [
     {
-      "name": "ppedro74/SerialCommands",
+      "owner": "ppedro74",
+      "name": "SerialCommands",
       "version": "^2.2.0"
     }
   ],
