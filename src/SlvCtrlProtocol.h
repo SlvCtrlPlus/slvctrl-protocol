@@ -283,9 +283,9 @@ class SlvCtrlProtocol {
       auto& o = ctx.out();
       o.print("introduce;type:");
       o.print(deviceType_);
-      o.print(";fw:");
+      o.print(",fw:");
       o.print(fwVersion_);
-      o.print(";protocol:");
+      o.print(",protocol:");
       o.print(protocolVersion);
       o.println(";status:ok");
     }
@@ -312,8 +312,7 @@ class SlvCtrlProtocol {
 
     void cmdStatus(ISlvCtrlCmdCtx& ctx) {
       auto& o = ctx.out();
-      o.print("status");
-      if (attrCount_) o.print(";");
+      o.print("status;");
 
       bool first = true;
       for (size_t i = 0; i < attrCount_; ++i) {
@@ -334,11 +333,11 @@ class SlvCtrlProtocol {
     void cmdGet(ISlvCtrlCmdCtx& ctx) {
       auto& o = ctx.out();
       const char* name = ctx.next();
-      if (!name) { o.println("get;status:error;reason:missing_attribute_name_arg"); return; }
+      if (!name) { o.println("get;;status:error,reason:missing_attribute_name_arg"); return; }
 
       IAttribute* a = findAttr(name);
-      if (!a) { o.print("get "); o.print(name); o.println(";status:error;reason:unknown_attribute"); return; }
-      if (!canRead(a->access())) { o.print("get "); o.print(name); o.println(";status:error;reason:write_only_attribute"); return; }
+      if (!a) { o.print("get "); o.print(name); o.println(";;status:error,reason:unknown_attribute"); return; }
+      if (!canRead(a->access())) { o.print("get "); o.print(name); o.println(";;status:error,reason:write_only_attribute"); return; }
 
       o.print("get ");
       o.print(a->name());
@@ -353,20 +352,20 @@ class SlvCtrlProtocol {
       const char* value = ctx.next();
 
       if (!name) {
-        o.println("set;status:error;reason:attribute_name_missing");
+        o.println("set;;status:error,reason:attribute_name_missing");
         return;
       }
 
       if (!value) {
         o.print("set ");
         o.print(name);
-        o.println(";status:error;reason:attribute_value_missing");
+        o.println(";;status:error,reason:attribute_value_missing");
         return;
       }
 
       IAttribute* a = findAttr(name);
-      if (!a) { o.print("set "); o.print(name); o.println(";status:error;reason:unknown_attribute"); return; }
-      if (!canWrite(a->access())) { o.print("set "); o.print(name); o.println(";status:error;reason:read_only_attribute"); return; }
+      if (!a) { o.print("set "); o.print(name); o.println(";;status:error,reason:unknown_attribute"); return; }
+      if (!canWrite(a->access())) { o.print("set "); o.print(name); o.println(";;status:error,reason:read_only_attribute"); return; }
 
       SlvCtrlParseError err = a->setFromCString(value);
 
@@ -374,12 +373,12 @@ class SlvCtrlProtocol {
       o.print(name);
       o.print(" ");
       o.print(value);
-      o.print(";");
+      o.print(";;");
 
       if (err == SlvCtrlParseError::Ok) {
         o.println("status:ok");
       } else {
-        o.print("status:error;reason:");
+        o.print("status:error,reason:");
         o.println(slvCtrlParseErrorToString(err));
       }
     }
@@ -387,7 +386,7 @@ class SlvCtrlProtocol {
     void cmdUnrecognized(ISlvCtrlCmdCtx& ctx, const char* cmd) {
       auto& o = ctx.out();
       o.print(cmd ? cmd : "");
-      o.print(";status:error;reason:unknown_command");
+      o.print(";;status:error,reason:unknown_command");
       o.println();
     }
 
