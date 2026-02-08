@@ -7,7 +7,7 @@ This is a Platform.IO library that implements the [SlvCtrl protocol](https://git
 - `status` - list all attributes with current value (if readable)
 - `get <name>` - read one attribute
 - `set <name> <value>` - set one attribute (if writable)
-- `introduce` - device identity line: `{devicetype},{fwversion},{protocolversion}`
+- `introduce` - device identity line: `type:{devicetype},fw:{fwversion},protocol:{protocolversion}`
 - `attributes` - list attributes: `attributes;name:rw[type[:meta]],...`
 
 ## Install (PlatformIO)
