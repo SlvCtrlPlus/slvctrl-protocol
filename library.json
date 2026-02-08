@@ -1,13 +1,19 @@
 {
-  "name": "SlvCtrlProtocol",
+  "name": "slvctrl-protocol",
   "version": "0.1.0",
-  "description": "Serial control protocol wrapper exposing typed attributes via SerialCommands",
-  "keywords": "serial, protocol, arduino, teensy, platformio",
+  "description": "SlvCtrl protocol implementation for embedded devices",
+  "keywords": ["serial", "protocol", "arduino"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/SlvCtrlPlus/SlvCtrlProtocol.git"
+    "url": "https://github.com/SlvCtrlPlus/slvctrl-protocol.git"
   },
   "license": "MIT",
+  "authors": [
+    {
+      "name": "SlvCtrlPlus",
+      "maintainer": true
+    }
+  ],
   "frameworks": [
     "arduino"
   ],
