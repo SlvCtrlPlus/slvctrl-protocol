@@ -10,30 +10,30 @@ class SlvCtrlArduinoOut final : public ISlvCtrlOut {
   public:
     explicit SlvCtrlArduinoOut(Stream& s) : s_(s) {}
 
-    void print(const char* s) override {
+    void send(const char* s) override {
         s_.print(s ? s : "");
     }
 
-    void print(int32_t v) override {
+    void send(char v) override {
+        s_.print(v);
+    }
+
+    void send(int32_t v) override {
         // Arduino Print uses long for signed integers
         s_.print((long)v);
     }
 
-    void print(uint32_t v) override {
+    void send(uint32_t v) override {
         // Arduino Print uses unsigned long for unsigned integers
         s_.print((unsigned long)v);
     }
 
-    void print(float v, uint8_t decimals = 3) override {
+    void send(float v, uint8_t decimals = 3) override {
         s_.print(v, decimals);
     }
 
-    void print(bool v) override {
+    void send(bool v) override {
         s_.print(v);
-    }
-
-    void println(const char* s = "") override {
-        s_.println(s ? s : "");
     }
 
   private:
