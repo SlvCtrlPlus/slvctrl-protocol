@@ -52,11 +52,11 @@ struct ISlvCtrlTransport {
 struct ISlvCtrlOut {
   virtual ~ISlvCtrlOut() = default;
   virtual void print(const char* s) = 0;
+  virtual void print(char c) = 0;
   virtual void print(uint32_t v) = 0;
   virtual void print(int32_t v) = 0;
   virtual void print(float v, uint8_t decimals = 3) = 0;
   virtual void print(bool v) = 0;
-  virtual void println(const char* s = "") = 0;
 };
 
 // ---- Command context abstraction (no SerialCommands) ----
@@ -271,6 +271,7 @@ class StrAttribute : public BaseAttribute<const char*> {
 class SlvCtrlProtocol {
   public:
     static constexpr uint32_t protocolVersion = 10000;
+    static constexpr const char ETX = '\n';
 
     template <size_t N>
     SlvCtrlProtocol(const char* deviceType, uint32_t fwVersion, IAttribute* (&attrs)[N])
@@ -287,7 +288,8 @@ class SlvCtrlProtocol {
       o.print(fwVersion_);
       o.print(",protocol:");
       o.print(protocolVersion);
-      o.println(";status:ok");
+      o.print(";status:ok");
+      o.print(ETX);
     }
 
     void cmdAttributes(ISlvCtrlCmdCtx& ctx) {
@@ -307,7 +309,7 @@ class SlvCtrlProtocol {
         a->describe(o);
       }
       o.print(";status:ok");
-      o.println();
+      o.print(ETX);
     }
 
     void cmdStatus(ISlvCtrlCmdCtx& ctx) {
@@ -327,23 +329,24 @@ class SlvCtrlProtocol {
         a->writeValue(o);
       }
       o.print(";status:ok");
-      o.println();
+      o.print(ETX);
     }
 
     void cmdGet(ISlvCtrlCmdCtx& ctx) {
       auto& o = ctx.out();
       const char* name = ctx.next();
-      if (!name) { o.println("get;;status:error,reason:missing_attribute_name_arg"); return; }
+      if (!name) { o.print("get;;status:error,reason:missing_attribute_name_arg"); o.print(ETX); return; }
 
       IAttribute* a = findAttr(name);
-      if (!a) { o.print("get "); o.print(name); o.println(";;status:error,reason:unknown_attribute"); return; }
-      if (!canRead(a->access())) { o.print("get "); o.print(name); o.println(";;status:error,reason:write_only_attribute"); return; }
+      if (!a) { o.print("get "); o.print(name); o.print(";;status:error,reason:unknown_attribute"); o.print(ETX); return; }
+      if (!canRead(a->access())) { o.print("get "); o.print(name); o.print(";;status:error,reason:write_only_attribute"); o.print(ETX); return; }
 
       o.print("get ");
       o.print(a->name());
       o.print(";value:");
       a->writeValue(o);
-      o.println(";status:ok");
+      o.print(";status:ok");
+      o.print(ETX);
     }
 
     void cmdSet(ISlvCtrlCmdCtx& ctx) {
@@ -352,20 +355,22 @@ class SlvCtrlProtocol {
       const char* value = ctx.next();
 
       if (!name) {
-        o.println("set;;status:error,reason:attribute_name_missing");
+        o.print("set;;status:error,reason:attribute_name_missing");
+        o.print(ETX);
         return;
       }
 
       if (!value) {
         o.print("set ");
         o.print(name);
-        o.println(";;status:error,reason:attribute_value_missing");
+        o.print(";;status:error,reason:attribute_value_missing");
+        o.print(ETX);
         return;
       }
 
       IAttribute* a = findAttr(name);
-      if (!a) { o.print("set "); o.print(name); o.println(";;status:error,reason:unknown_attribute"); return; }
-      if (!canWrite(a->access())) { o.print("set "); o.print(name); o.println(";;status:error,reason:read_only_attribute"); return; }
+      if (!a) { o.print("set "); o.print(name); o.print(";;status:error,reason:unknown_attribute"); o.print(ETX); return; }
+      if (!canWrite(a->access())) { o.print("set "); o.print(name); o.print(";;status:error,reason:read_only_attribute"); o.print(ETX); return; }
 
       SlvCtrlParseError err = a->setFromCString(value);
 
@@ -376,18 +381,20 @@ class SlvCtrlProtocol {
       o.print(";;");
 
       if (err == SlvCtrlParseError::Ok) {
-        o.println("status:ok");
+        o.print("status:ok");
       } else {
         o.print("status:error,reason:");
-        o.println(slvCtrlParseErrorToString(err));
+        o.print(slvCtrlParseErrorToString(err));
       }
+
+      o.print(ETX);
     }
 
     void cmdUnrecognized(ISlvCtrlCmdCtx& ctx, const char* cmd) {
       auto& o = ctx.out();
       o.print(cmd ? cmd : "");
       o.print(";;status:error,reason:unknown_command");
-      o.println();
+      o.print(ETX);
     }
 
   private:

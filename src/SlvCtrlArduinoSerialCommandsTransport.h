@@ -14,6 +14,10 @@ class SlvCtrlArduinoOut final : public ISlvCtrlOut {
         s_.print(s ? s : "");
     }
 
+    void print(char v) override {
+        s_.print(v);
+    }
+
     void print(int32_t v) override {
         // Arduino Print uses long for signed integers
         s_.print((long)v);
@@ -30,10 +34,6 @@ class SlvCtrlArduinoOut final : public ISlvCtrlOut {
 
     void print(bool v) override {
         s_.print(v);
-    }
-
-    void println(const char* s = "") override {
-        s_.println(s ? s : "");
     }
 
   private:
