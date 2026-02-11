@@ -258,7 +258,7 @@ public:
                 void* ctx = nullptr)
     : Base(name, getter, setter, ctx),
       options_(options),
-      count_(N) {
+      optionsCount_(N) {
     static_assert(N > 0, "ListAttribute: options array must not be empty");
   }
 
@@ -293,7 +293,7 @@ public:
     if constexpr (std::is_same_v<T, int32_t>) out.write("int(");
     else out.write("str(");
 
-    for (size_t i = 0; i < count_; ++i) {
+    for (size_t i = 0; i < optionsCount_; ++i) {
       if (i) out.write("|");
       writeOption_(out, options_[i]);
     }
@@ -303,14 +303,14 @@ public:
 
 private:
   bool containsInt_(int32_t v) const {
-    for (size_t i = 0; i < count_; ++i) {
+    for (size_t i = 0; i < optionsCount_; ++i) {
       if (options_[i] == v) return true;
     }
     return false;
   }
 
   const char* findStr_(const char* s) const {
-    for (size_t i = 0; i < count_; ++i) {
+    for (size_t i = 0; i < optionsCount_; ++i) {
       const char* opt = options_[i];
       if (!opt) continue;
       if (strcmp(opt, s) == 0) return opt;
@@ -323,7 +323,7 @@ private:
 
 private:
   const T* options_;
-  size_t count_;
+  size_t optionsCount_;
 };
 
 class StrAttribute : public BaseAttribute<const char*> {
