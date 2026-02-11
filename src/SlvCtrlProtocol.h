@@ -51,12 +51,12 @@ struct ISlvCtrlTransport {
 // ---- Output abstraction (no Stream) ----
 struct ISlvCtrlOut {
   virtual ~ISlvCtrlOut() = default;
-  virtual void send(const char* s) = 0;
-  virtual void send(char c) = 0;
-  virtual void send(uint32_t v) = 0;
-  virtual void send(int32_t v) = 0;
-  virtual void send(float v, uint8_t decimals = 3) = 0;
-  virtual void send(bool v) = 0;
+  virtual void write(const char* s) = 0;
+  virtual void write(char c) = 0;
+  virtual void write(uint32_t v) = 0;
+  virtual void write(int32_t v) = 0;
+  virtual void write(float v, uint8_t decimals = 3) = 0;
+  virtual void write(bool v) = 0;
 };
 
 // ---- Command context abstraction (no SerialCommands) ----
@@ -107,7 +107,7 @@ class BaseAttribute : public IAttribute {
     }
 
     void writeValue(ISlvCtrlOut& out) const override {
-      out.send(this->getValue());
+      out.write(this->getValue());
     }
 
   private:
@@ -132,8 +132,8 @@ class IntAttribute : public BaseAttribute<int32_t> {
     }
 
     void describe(ISlvCtrlOut& out) const override {
-      out.send(slvCtrlAccessToString(access()));
-      out.send("[int]");
+      out.write(slvCtrlAccessToString(access()));
+      out.write("[int]");
     }
 };
 
@@ -151,8 +151,8 @@ class FloatAttribute : public BaseAttribute<float> {
     }
 
     void describe(ISlvCtrlOut& out) const override {
-      out.send(slvCtrlAccessToString(access()));
-      out.send("[float]");
+      out.write(slvCtrlAccessToString(access()));
+      out.write("[float]");
     }
 };
 
@@ -169,12 +169,12 @@ class BoolAttribute : public BaseAttribute<bool> {
     }
 
     void describe(ISlvCtrlOut& out) const override {
-      out.send(slvCtrlAccessToString(access()));
-      out.send("[bool]");
+      out.write(slvCtrlAccessToString(access()));
+      out.write("[bool]");
     }
 
     void writeValue(ISlvCtrlOut& out) const override {
-      out.send(this->getValue() ? "true" : "false");
+      out.write(this->getValue() ? "true" : "false");
     }
 };
 
@@ -216,26 +216,114 @@ class RangeAttribute : public BaseAttribute<T> {
     }
 
     void describe(ISlvCtrlOut& out) const override {
-      out.send(slvCtrlAccessToString(this->access()));
-      out.send("[");
+      out.write(slvCtrlAccessToString(this->access()));
+      out.write("[");
       if constexpr (std::is_same_v<T, int32_t>) {
-        out.send("int(");
+        out.write("int(");
       }
       else if constexpr (std::is_same_v<T, float>) {
-        out.send("float(");
+        out.write("float(");
       }
       else {
-        out.send("?(");
+        out.write("?(");
       }
-      out.send(min_);
-      out.send("..");
-      out.send(max_);
-      out.send(")]");
+      out.write(min_);
+      out.write("..");
+      out.write(max_);
+      out.write(")]");
     }
 
   private:
     T min_;
     T max_;
+};
+
+template <typename T>
+class ListAttribute : public BaseAttribute<T> {
+  using Base   = BaseAttribute<T>;
+  using Getter = typename Base::Getter;
+  using Setter = typename Base::Setter;
+
+  static_assert(
+    std::is_same_v<T, int32_t> || std::is_same_v<T, const char*>,
+    "ListAttribute<T>: T must be int32_t or const char*"
+  );
+
+  public:
+    template <size_t N>
+    ListAttribute(const char* name,
+                  Getter getter,
+                  Setter setter,
+                  const T (&options)[N],
+                  void* ctx = nullptr)
+      : Base(name, getter, setter, ctx),
+        options_(options),
+        optionsCount_(N) {
+      static_assert(N > 0, "ListAttribute: options array must not be empty");
+    }
+
+    SlvCtrlParseError setFromCString(const char* s) override {
+      if (!s) return SlvCtrlParseError::MissingValue;
+
+      if constexpr (std::is_same_v<T, int32_t>) {
+        char* end = nullptr;
+        long v = strtol(s, &end, 10);
+        if (end == s || *end != '\0') return SlvCtrlParseError::NotANumber;
+        if (v < (long)INT32_MIN || v > (long)INT32_MAX) return SlvCtrlParseError::OutOfRange;
+
+        int32_t iv = (int32_t)v;
+        if (!containsInt_(iv)) return SlvCtrlParseError::InvalidValue;
+        return this->setValue(iv);
+      }
+
+      if constexpr (std::is_same_v<T, const char*>) {
+        // Store canonical pointer from options_ (safer than storing token buffer)
+        const char* canonical = containsStr_(s);
+        if (!canonical) return SlvCtrlParseError::InvalidValue;
+        return this->setValue(canonical);
+      }
+
+      __builtin_trap();
+    }
+
+    void describe(ISlvCtrlOut& out) const override {
+      out.write(slvCtrlAccessToString(this->access()));
+      out.write("[");
+
+      if constexpr (std::is_same_v<T, int32_t>) out.write("int(");
+      else out.write("str(");
+
+      for (size_t i = 0; i < optionsCount_; ++i) {
+        if (i) out.write("|");
+        writeOption_(out, options_[i]);
+      }
+
+      out.write(")]");
+    }
+
+  private:
+    bool containsInt_(int32_t v) const {
+      for (size_t i = 0; i < optionsCount_; ++i) {
+        if (options_[i] == v) return true;
+      }
+      return false;
+    }
+
+    const char* containsStr_(const char* s) const {
+      for (size_t i = 0; i < optionsCount_; ++i) {
+        const char* opt = options_[i];
+        if (!opt) continue;
+        if (strcmp(opt, s) == 0) return opt;
+      }
+      return nullptr;
+    }
+
+    static void writeOption_(ISlvCtrlOut& o, int32_t v) { o.write(v); }
+    static void writeOption_(ISlvCtrlOut& o, const char* s) { o.write(s ? s : ""); }
+
+  private:
+    const T* options_;
+    size_t optionsCount_;
 };
 
 class StrAttribute : public BaseAttribute<const char*> {
@@ -249,13 +337,13 @@ class StrAttribute : public BaseAttribute<const char*> {
     }
 
     void describe(ISlvCtrlOut& out) const override {
-      out.send(slvCtrlAccessToString(access()));
-      out.send("[str]");
+      out.write(slvCtrlAccessToString(access()));
+      out.write("[str]");
     }
 
     void writeValue(ISlvCtrlOut& out) const override {
       const char* s = this->getValue();
-      out.send(s ? s : "");
+      out.write(s ? s : "");
     }
 };
 
@@ -282,71 +370,71 @@ class SlvCtrlProtocol {
 
     void cmdIntroduce(ISlvCtrlCmdCtx& ctx) {
       auto& o = ctx.out();
-      o.send("introduce;type:");
-      o.send(deviceType_);
-      o.send(",fw:");
-      o.send(fwVersion_);
-      o.send(",protocol:");
-      o.send(protocolVersion);
-      o.send(";status:ok");
-      o.send(ETX);
+      o.write("introduce;type:");
+      o.write(deviceType_);
+      o.write(",fw:");
+      o.write(fwVersion_);
+      o.write(",protocol:");
+      o.write(protocolVersion);
+      o.write(";status:ok");
+      o.write(ETX);
     }
 
     void cmdAttributes(ISlvCtrlCmdCtx& ctx) {
       auto& o = ctx.out();
-      o.send("attributes;");
+      o.write("attributes;");
 
       bool first = true;
       for (size_t i = 0; i < attrCount_; ++i) {
         IAttribute* a = attrs_[i];
         if (!a) continue;
 
-        if (!first) o.send(",");
+        if (!first) o.write(",");
         first = false;
 
-        o.send(a->name());
-        o.send(":");
+        o.write(a->name());
+        o.write(":");
         a->describe(o);
       }
-      o.send(";status:ok");
-      o.send(ETX);
+      o.write(";status:ok");
+      o.write(ETX);
     }
 
     void cmdStatus(ISlvCtrlCmdCtx& ctx) {
       auto& o = ctx.out();
-      o.send("status;");
+      o.write("status;");
 
       bool first = true;
       for (size_t i = 0; i < attrCount_; ++i) {
         IAttribute* a = attrs_[i];
         if (!a || !canRead(a->access())) continue;
 
-        if (!first) o.send(",");
+        if (!first) o.write(",");
         first = false;
 
-        o.send(a->name());
-        o.send(":");
+        o.write(a->name());
+        o.write(":");
         a->writeValue(o);
       }
-      o.send(";status:ok");
-      o.send(ETX);
+      o.write(";status:ok");
+      o.write(ETX);
     }
 
     void cmdGet(ISlvCtrlCmdCtx& ctx) {
       auto& o = ctx.out();
       const char* name = ctx.next();
-      if (!name) { o.send("get;;status:error,reason:missing_attribute_name_arg"); o.send(ETX); return; }
+      if (!name) { o.write("get;;status:error,reason:missing_attribute_name_arg"); o.write(ETX); return; }
 
       IAttribute* a = findAttr(name);
-      if (!a) { o.send("get "); o.send(name); o.send(";;status:error,reason:unknown_attribute"); o.send(ETX); return; }
-      if (!canRead(a->access())) { o.send("get "); o.send(name); o.send(";;status:error,reason:write_only_attribute"); o.send(ETX); return; }
+      if (!a) { o.write("get "); o.write(name); o.write(";;status:error,reason:unknown_attribute"); o.write(ETX); return; }
+      if (!canRead(a->access())) { o.write("get "); o.write(name); o.write(";;status:error,reason:write_only_attribute"); o.write(ETX); return; }
 
-      o.send("get ");
-      o.send(a->name());
-      o.send(";value:");
+      o.write("get ");
+      o.write(a->name());
+      o.write(";value:");
       a->writeValue(o);
-      o.send(";status:ok");
-      o.send(ETX);
+      o.write(";status:ok");
+      o.write(ETX);
     }
 
     void cmdSet(ISlvCtrlCmdCtx& ctx) {
@@ -355,46 +443,46 @@ class SlvCtrlProtocol {
       const char* value = ctx.next();
 
       if (!name) {
-        o.send("set;;status:error,reason:attribute_name_missing");
-        o.send(ETX);
+        o.write("set;;status:error,reason:attribute_name_missing");
+        o.write(ETX);
         return;
       }
 
       if (!value) {
-        o.send("set ");
-        o.send(name);
-        o.send(";;status:error,reason:attribute_value_missing");
-        o.send(ETX);
+        o.write("set ");
+        o.write(name);
+        o.write(";;status:error,reason:attribute_value_missing");
+        o.write(ETX);
         return;
       }
 
       IAttribute* a = findAttr(name);
-      if (!a) { o.send("set "); o.send(name); o.send(";;status:error,reason:unknown_attribute"); o.send(ETX); return; }
-      if (!canWrite(a->access())) { o.send("set "); o.send(name); o.send(";;status:error,reason:read_only_attribute"); o.send(ETX); return; }
+      if (!a) { o.write("set "); o.write(name); o.write(";;status:error,reason:unknown_attribute"); o.write(ETX); return; }
+      if (!canWrite(a->access())) { o.write("set "); o.write(name); o.write(";;status:error,reason:read_only_attribute"); o.write(ETX); return; }
 
       SlvCtrlParseError err = a->setFromCString(value);
 
-      o.send("set ");
-      o.send(name);
-      o.send(" ");
-      o.send(value);
-      o.send(";;");
+      o.write("set ");
+      o.write(name);
+      o.write(" ");
+      o.write(value);
+      o.write(";;");
 
       if (err == SlvCtrlParseError::Ok) {
-        o.send("status:ok");
+        o.write("status:ok");
       } else {
-        o.send("status:error,reason:");
-        o.send(slvCtrlParseErrorToString(err));
+        o.write("status:error,reason:");
+        o.write(slvCtrlParseErrorToString(err));
       }
 
-      o.send(ETX);
+      o.write(ETX);
     }
 
     void cmdUnrecognized(ISlvCtrlCmdCtx& ctx, const char* cmd) {
       auto& o = ctx.out();
-      o.send(cmd ? cmd : "");
-      o.send(";;status:error,reason:unknown_command");
-      o.send(ETX);
+      o.write(cmd ? cmd : "");
+      o.write(";;status:error,reason:unknown_command");
+      o.write(ETX);
     }
 
   private:
