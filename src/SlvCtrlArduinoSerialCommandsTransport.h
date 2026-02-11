@@ -10,11 +10,11 @@ class SlvCtrlArduinoOut final : public ISlvCtrlOut {
   public:
     explicit SlvCtrlArduinoOut(Stream& s) : s_(s) {}
 
-    void send(const char* s) override {
+    void write(const char* s) override {
         s_.print(s ? s : "");
     }
 
-    void send(char v) override {
+    void write(char v) override {
         s_.print(v);
     }
 

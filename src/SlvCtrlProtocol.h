@@ -238,6 +238,94 @@ class RangeAttribute : public BaseAttribute<T> {
     T max_;
 };
 
+template <typename T>
+class ListAttribute : public BaseAttribute<T> {
+  using Base   = BaseAttribute<T>;
+  using Getter = typename Base::Getter;
+  using Setter = typename Base::Setter;
+
+  static_assert(
+    std::is_same_v<T, int32_t> || std::is_same_v<T, const char*>,
+    "ListAttribute<T>: T must be int32_t or const char*"
+  );
+
+public:
+  template <size_t N>
+  ListAttribute(const char* name,
+                Getter getter,
+                Setter setter,
+                const T (&options)[N],
+                void* ctx = nullptr)
+    : Base(name, getter, setter, ctx),
+      options_(options),
+      count_(N) {
+    static_assert(N > 0, "ListAttribute: options array must not be empty");
+  }
+
+  SlvCtrlParseError setFromCString(const char* s) override {
+    if (!s) return SlvCtrlParseError::MissingValue;
+
+    if constexpr (std::is_same_v<T, int32_t>) {
+      char* end = nullptr;
+      long v = strtol(s, &end, 10);
+      if (end == s || *end != '\0') return SlvCtrlParseError::NotANumber;
+      if (v < (long)INT32_MIN || v > (long)INT32_MAX) return SlvCtrlParseError::OutOfRange;
+
+      int32_t iv = (int32_t)v;
+      if (!containsInt_(iv)) return SlvCtrlParseError::InvalidValue;
+      return this->setValue(iv);
+    }
+
+    if constexpr (std::is_same_v<T, const char*>) {
+      // Store canonical pointer from options_ (safer than storing token buffer)
+      const char* canonical = findStr_(s);
+      if (!canonical) return SlvCtrlParseError::InvalidValue;
+      return this->setValue(canonical);
+    }
+
+    __builtin_trap();
+  }
+
+  void describe(ISlvCtrlOut& out) const override {
+    out.send(slvCtrlAccessToString(this->access()));
+    out.send("[");
+
+    if constexpr (std::is_same_v<T, int32_t>) out.send("int(");
+    else out.send("str(");
+
+    for (size_t i = 0; i < count_; ++i) {
+      if (i) out.send("|");
+      sendOption_(out, options_[i]);
+    }
+
+    out.send(")]");
+  }
+
+private:
+  bool containsInt_(int32_t v) const {
+    for (size_t i = 0; i < count_; ++i) {
+      if (options_[i] == v) return true;
+    }
+    return false;
+  }
+
+  const char* findStr_(const char* s) const {
+    for (size_t i = 0; i < count_; ++i) {
+      const char* opt = options_[i];
+      if (!opt) continue;
+      if (strcmp(opt, s) == 0) return opt;
+    }
+    return nullptr;
+  }
+
+  static void sendOption_(ISlvCtrlOut& o, int32_t v) { o.send(v); }
+  static void sendOption_(ISlvCtrlOut& o, const char* s) { o.send(s ? s : ""); }
+
+private:
+  const T* options_;
+  size_t count_;
+};
+
 class StrAttribute : public BaseAttribute<const char*> {
   public:
     StrAttribute(const char* name, Getter getter, Setter setter, void* ctx = nullptr)

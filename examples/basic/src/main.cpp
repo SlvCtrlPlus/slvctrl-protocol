@@ -4,10 +4,12 @@
 #include <SlvCtrlArduinoSerialCommandsTransport.h>
 
 // --------- your state ----------
-static int32_t  speed    = 0;
-static int32_t  maxSpeed = 100;
-static int32_t  state    = 0;
-static bool ready    = false;
+static int32_t     speed    = 0;
+static int32_t     maxSpeed = 100;
+static int32_t     state    = 0;
+static bool        ready    = false;
+static int32_t     baud     = 9600;
+static const char* mode     = "off";
 
 // --------- getters/setters (C function pointers) ----------
 // Note: your attribute classes use function pointers: T(*)(void*), not lambdas.
@@ -22,17 +24,30 @@ static SlvCtrlParseError setState(void*, int32_t v) { state = v; return SlvCtrlP
 
 static bool getReady(void*) { return ready; }
 
+static int32_t getBaud(void*) { return baud; }
+
+static const char* getMode(void*) { return mode; }
+static SlvCtrlParseError setMode(void*, const char* v) { mode = v; return SlvCtrlParseError::Ok; }
+
 // --------- attributes ----------
 static IntAttribute speedAttr("speed", &getSpeed, &setSpeed);
 static RangeAttribute<int32_t> maxAttr("max", &getMaxSpeed, &setMaxSpeed, 0, 100);
 static IntAttribute stateAttr("state", &getState, &setState);
 static BoolAttribute readyAttr("ready", &getReady, nullptr);
 
+static const int32_t kBaudOpts[] = { 9600, 19200, 115200 };
+ListAttribute<int32_t> baudAttr("baud", getBaud, nullptr, kBaudOpts);
+
+static const char* kModeOpts[] = { "off", "on", "auto" };
+ListAttribute<const char*> modeAttr("mode", getMode, setMode, kModeOpts);
+
 static IAttribute* attrs[] = {
   &speedAttr,
   &maxAttr,
   &stateAttr,
   &readyAttr,
+  &baudAttr,
+  &modeAttr,
 };
 
 // --------- protocol + transport ----------
