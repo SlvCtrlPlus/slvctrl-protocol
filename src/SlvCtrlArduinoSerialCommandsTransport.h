@@ -18,21 +18,21 @@ class SlvCtrlArduinoOut final : public ISlvCtrlOut {
         s_.print(v);
     }
 
-    void send(int32_t v) override {
+    void write(int32_t v) override {
         // Arduino Print uses long for signed integers
         s_.print((long)v);
     }
 
-    void send(uint32_t v) override {
+    void write(uint32_t v) override {
         // Arduino Print uses unsigned long for unsigned integers
         s_.print((unsigned long)v);
     }
 
-    void send(float v, uint8_t decimals = 3) override {
+    void write(float v, uint8_t decimals = 3) override {
         s_.print(v, decimals);
     }
 
-    void send(bool v) override {
+    void write(bool v) override {
         s_.print(v);
     }
 
