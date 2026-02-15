@@ -19,7 +19,7 @@ static SlvCtrlParseError setSpeed(void*, int32_t v) { speed = v; return SlvCtrlP
 static std::optional<int32_t> getMaxSpeed(void*) { return maxSpeed; }
 static SlvCtrlParseError setMaxSpeed(void*, int32_t v) { maxSpeed = v; return SlvCtrlParseError::Ok; }
 
-static std::optional<int32_t> getState(void*) { return state; }
+static std::optional<int32_t> getState(void*) { return ready ? std::make_optional(state) : std::nullopt; }
 static SlvCtrlParseError setState(void*, int32_t v) { state = v; return SlvCtrlParseError::Ok; }
 
 static std::optional<bool> getReady(void*) { return ready; }
