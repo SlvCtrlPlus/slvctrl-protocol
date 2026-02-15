@@ -1,8 +1,6 @@
 # SlvCtrlProtocol
 
-[![PlatformIO Registry](https://badges.registry.platformio.org/packages/slvctrlplus/library/slvctrl-protocol.svg)](https://registry.platformio.org/libraries/slvctrlplus/slvctrl-protocol)
-
-This is a Platform.IO library that implements the [SlvCtrl protocol](https://github.com/SlvCtrlPlus/slvctrlplus-doc/tree/main/protocol).
+This is a Platform.io library that implements the [SlvCtrl protocol](https://github.com/SlvCtrlPlus/slvctrlplus-doc/tree/main/protocol).
 
 ## Commands
 
@@ -14,11 +12,11 @@ This is a Platform.IO library that implements the [SlvCtrl protocol](https://git
 
 ## Install (PlatformIO)
 
-In your project `platformio.ini`:
+In your project's `platformio.ini`:
 
 ```ini
 lib_deps =
-  https://github.com/SlvCtrlPlus/slvctrl-protocol.git#v0.1.0
+  slvctrl-protocol@^0.1.0
 ```
 
 ## Usage
@@ -29,7 +27,8 @@ Currently the following attribute types are supported:
 
 * IntAttribute
 * FloatAttribute
-* RangeAttribute<int|float>
+* RangeAttribute<int32_t|float>
+* ListAttribute<int32_t|const char*>
 * StrAttribute
 * BoolAttribute
 
