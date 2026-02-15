@@ -2,7 +2,7 @@
 
 [![PlatformIO Registry](https://badges.registry.platformio.org/packages/slvctrlplus/library/slvctrl-protocol.svg)](https://registry.platformio.org/libraries/slvctrlplus/slvctrl-protocol)
 
-This is a Platform.io library that implements the [SlvCtrl protocol](https://github.com/SlvCtrlPlus/slvctrlplus-doc/tree/main/protocol).
+This is a PlatformIO library that implements the [SlvCtrl protocol](https://github.com/SlvCtrlPlus/slvctrlplus-doc/tree/main/protocol).
 
 ## Commands
 
@@ -18,7 +18,7 @@ In your project's `platformio.ini`:
 
 ```ini
 lib_deps =
-  slvctrl-protocol@^0.1.0
+  slvctrlplus/slvctrl-protocol@^0.1.3
 ```
 
 ## Usage
