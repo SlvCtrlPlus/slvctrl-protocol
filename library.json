@@ -1,6 +1,6 @@
 {
   "name": "slvctrl-protocol",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "SlvCtrl protocol implementation for embedded devices",
   "keywords": ["serial", "protocol", "arduino"],
   "repository": {
