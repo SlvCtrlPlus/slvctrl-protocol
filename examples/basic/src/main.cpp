@@ -13,20 +13,20 @@ static const char* mode     = "off";
 
 // --------- getters/setters (C function pointers) ----------
 // Note: your attribute classes use function pointers: T(*)(void*), not lambdas.
-static int32_t getSpeed(void*) { return speed; }
+static std::optional<int32_t> getSpeed(void*) { return speed; }
 static SlvCtrlParseError setSpeed(void*, int32_t v) { speed = v; return SlvCtrlParseError::Ok; }
 
-static int32_t getMaxSpeed(void*) { return maxSpeed; }
+static std::optional<int32_t> getMaxSpeed(void*) { return maxSpeed; }
 static SlvCtrlParseError setMaxSpeed(void*, int32_t v) { maxSpeed = v; return SlvCtrlParseError::Ok; }
 
-static int32_t getState(void*) { return state; }
+static std::optional<int32_t> getState(void*) { return ready ? std::make_optional(state) : std::nullopt; }
 static SlvCtrlParseError setState(void*, int32_t v) { state = v; return SlvCtrlParseError::Ok; }
 
-static bool getReady(void*) { return ready; }
+static std::optional<bool> getReady(void*) { return ready; }
 
-static int32_t getBaud(void*) { return baud; }
+static std::optional<int32_t> getBaud(void*) { return baud; }
 
-static const char* getMode(void*) { return mode; }
+static std::optional<const char*> getMode(void*) { return mode; }
 static SlvCtrlParseError setMode(void*, const char* v) { mode = v; return SlvCtrlParseError::Ok; }
 
 // --------- attributes ----------
