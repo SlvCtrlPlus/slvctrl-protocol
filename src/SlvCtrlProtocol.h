@@ -178,7 +178,9 @@ class BoolAttribute : public BaseAttribute<bool> {
     }
 
     void writeValue(ISlvCtrlOut& out) const override {
-      out.write(this->getValue() ? "true" : "false");
+      auto val = this->getValue();
+      if (!val.has_value()) return;
+      out.write(val.value() ? "true" : "false");
     }
 };
 
