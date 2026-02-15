@@ -1,8 +1,9 @@
 #pragma once
 
+#include <optional>
+#include <type_traits>
 #include <stdint.h>
 #include <stddef.h>
-#include <type_traits>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -79,7 +80,7 @@ struct IAttribute {
 template <typename T>
 class BaseAttribute : public IAttribute {
   public:
-    using Getter = T (*)(void* ctx);
+    using Getter = std::optional<T> (*)(void* ctx);
     using Setter = SlvCtrlParseError (*)(void* ctx, T value);
 
     BaseAttribute(const char* name, Getter g, Setter s, void* ctx = nullptr) : name_(name), ctx_(ctx), getter_(g), setter_(s) {
@@ -97,8 +98,8 @@ class BaseAttribute : public IAttribute {
       return SlvCtrlAccess::INVALID;
     }
 
-    T getValue() const {
-      return getter_ ? getter_(ctx_) : T{};
+    std::optional<T> getValue() const {
+      return getter_ ? getter_(ctx_) : std::nullopt;
     }
 
     SlvCtrlParseError setValue(T value) {
@@ -107,7 +108,10 @@ class BaseAttribute : public IAttribute {
     }
 
     void writeValue(ISlvCtrlOut& out) const override {
-      out.write(this->getValue());
+      auto val = getValue();
+      if (val.has_value()) {
+        out.write(val.value());
+      }
     }
 
   private:
@@ -120,7 +124,7 @@ class BaseAttribute : public IAttribute {
 class IntAttribute : public BaseAttribute<int32_t> {
   public:
     IntAttribute(const char* name, Getter getter, Setter setter, void* ctx = nullptr)
-    : BaseAttribute<int32_t>(name, getter, setter, ctx) {}
+      : BaseAttribute<int32_t>(name, getter, setter, ctx) {}
     
     SlvCtrlParseError setFromCString(const char* s) override {
       if (!s) return SlvCtrlParseError::MissingValue;
@@ -140,7 +144,7 @@ class IntAttribute : public BaseAttribute<int32_t> {
 class FloatAttribute : public BaseAttribute<float> {
   public:
     FloatAttribute(const char* name, Getter getter, Setter setter, void* ctx = nullptr)
-        : BaseAttribute<float>(name, getter, setter, ctx) {}
+      : BaseAttribute<float>(name, getter, setter, ctx) {}
 
     SlvCtrlParseError setFromCString(const char* s) override {
       if (!s) return SlvCtrlParseError::MissingValue;
@@ -159,7 +163,7 @@ class FloatAttribute : public BaseAttribute<float> {
 class BoolAttribute : public BaseAttribute<bool> {
   public:
     BoolAttribute(const char* name, Getter getter, Setter setter, void* ctx = nullptr)
-        : BaseAttribute<bool>(name, getter, setter, ctx) {}
+      : BaseAttribute<bool>(name, getter, setter, ctx) {}
 
     SlvCtrlParseError setFromCString(const char* s) override {
       if (!s) return SlvCtrlParseError::MissingValue;
@@ -339,11 +343,6 @@ class StrAttribute : public BaseAttribute<const char*> {
     void describe(ISlvCtrlOut& out) const override {
       out.write(slvCtrlAccessToString(access()));
       out.write("[str]");
-    }
-
-    void writeValue(ISlvCtrlOut& out) const override {
-      const char* s = this->getValue();
-      out.write(s ? s : "");
     }
 };
 
